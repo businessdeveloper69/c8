@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025]
+        os: [windows-2025, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
@@ -29,7 +29,7 @@ jobs:
         run: |
           set -eu
           git worktree add --detach sut-base ae5a0cf4349b92cac910cf7275e724ab7a725b9d
-          git worktree add --detach sut-head e50007644fb5fa6ca05613a8615cea3ef159f33e
+          git worktree add --detach sut-head 654a366a7c0599c8df2eddbabf89f12cd095e6aa
           git init -q stryker
           git -C stryker fetch -q --depth=1 https://github.com/stryker-mutator/stryker-dashboard.git 48c9a2c4b120f6a7ac94bf12a3faa59bff9ced7b
           git -C stryker checkout -q --detach FETCH_HEAD
@@ -49,3 +49,24 @@ jobs:
       - name: Measure submitted c8 under the native npm script shell
         if: success() || failure()
         run: python verify.py head sut-head stryker reports-head
+  stock:
+    if: github.repository == 'businessdeveloper69/c8'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 654a366a7c0599c8df2eddbabf89f12cd095e6aa
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: git rev-parse HEAD && node --version && npm --version
+      - run: npm ci --engine-strict
+      - run: npm i monocart-coverage-reports@2 --save-dev
+      - run: npm test

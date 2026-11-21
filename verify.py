@@ -56,6 +56,8 @@ def actual():
     page=(report/'index.html').read_text(encoding='utf-8')
     percentages = re.findall(r'<span class="strong">\s*([^<]+?)\s*</span>\s*<span class="quiet">\s*(Statements|Branches|Functions|Lines)\s*</span>',page,re.I)
     item['thresholds']={t:html.unescape(v).strip() for v,t in percentages}
+    fractions = re.findall(r"""<span class="quiet">\s*(Statements|Branches|Functions|Lines)\s*</span>\s*<span class=['"]fraction['"]>\s*(\d+/\d+)\s*</span>""", page, re.I)
+    item['counts'] = dict(fractions)
     item['covered_files']=sorted(p.relative_to(report).as_posix()[:-5] for p in report.rglob('*.html') if p.name != 'index.html')
     output=(scratch/'stryker.log').read_text(encoding='utf-8')
     item['passed_test_count']=int(re.search(r'(\d+) passing',output).group(1))
@@ -68,7 +70,9 @@ def actual():
     tests_included=any(re.search(r'(^|/)test/',n) for n in item['covered_files'])
     broken=WINDOWS and lane=='base'
     item['test_files_included']=tests_included
-    if not broken:
+    if broken:
+        assert sum(bool(re.search(r'(^|/)test/',n)) for n in item['covered_files']) == 4 and item['exit']==0, item
+    else:
         assert not tests_included and item['exit']==0, item
 
 
@@ -83,6 +87,17 @@ def controls():
     (cwd/'-dash').mkdir(exist_ok=True)
     (cwd/'-dash/ignored.cjs').write_text("module.exports = () => 3;\n")
     (cwd/'child.cjs').write_text("require('./skip/ignored.cjs'); require(\"./it's/ignored.cjs\"); require('./-dash/ignored.cjs');\n")
+    examples = {
+        'class': ('class-[12].cjs', ['class-1.cjs','class-2.cjs'], 'class-3.cjs'),
+        'brace': ('brace-{one,two}.cjs', ['brace-one.cjs','brace-two.cjs'], 'brace-three.cjs'),
+        'exact': ('exact.cjs', ['exact.cjs'], 'near-exact.cjs'),
+    }
+    files_to_load = [f for _, matching, retained in examples.values() for f in [*matching, retained]]
+    files_to_load.extend(["'unmatched.cjs", "unmatched.cjs"])
+    with (cwd/'child.cjs').open('a') as child_source:
+        for f in files_to_load:
+            (cwd/f).write_text("module.exports = function unused() {\n  return 9;\n};\n")
+            child_source.write('require(' + json.dumps('./'+f) + ');\n')
     (cwd/'config.json').write_text(json.dumps({'exclude':["'skip/**'"]}))
     tail="node child.cjs --exclude 'child/**' -x fake -- 'tail/**'"
     prefix='c8 --reporter=json-summary --reports-dir=report '
@@ -90,6 +105,9 @@ def controls():
     scripts["apostrophe"] = prefix + ("--exclude 'it's/**' " if WINDOWS else "--exclude \"it's/**\" ") + tail
     scripts["dashboard-alias-equals"] = prefix + "-x='skip/**' " + tail
     scripts["dash"] = prefix + "--exclude '-dash/**' " + tail
+    for key,(pattern,_,_) in examples.items():
+        scripts[key] = prefix + "--exclude '" + pattern + "' " + tail
+    scripts['unmatched'] = prefix + """--exclude "'unmatched.cjs" """ + tail
     (cwd/'package.json').write_text(json.dumps({'private':True,'scripts':scripts}))
     argvc=None
     for key in scripts:
@@ -113,6 +131,11 @@ def controls():
             assert ("it's/ignored.cjs" in files)==(WINDOWS and lane=='base'),(lane,key,files)
         elif key=='dash':
             assert ('-dash/ignored.cjs' in files)==(not WINDOWS or lane=='base'),(lane,key,files)
+        elif key in examples:
+            _, matching, retained = examples[key]
+            assert retained in files and all((f in files)==(WINDOWS and lane=='base') for f in matching), (lane,key,files)
+        elif key=='unmatched':
+            assert "'unmatched.cjs" not in files and 'unmatched.cjs' in files, (lane,key,files)
 
 
 try:
