@@ -1,58 +1,13 @@
-name: c8 npm script and downstream coverage
+name: c8 stock terminal gates
 on:
   push:
     branches: [verify-488-npm-shells]
 permissions:
   contents: read
 jobs:
-  downstream:
-    if: github.repository == 'businessdeveloper69/c8'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-2025, ubuntu-24.04]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    env:
-      CI: true
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          fetch-depth: 8
-          persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version: 26
-          package-manager-cache: false
-      - name: Prepare both c8 versions and pin Stryker Dashboard
-        shell: bash
-        run: |
-          set -eu
-          git worktree add --detach sut-base ae5a0cf4349b92cac910cf7275e724ab7a725b9d
-          git worktree add --detach sut-head 654a366a7c0599c8df2eddbabf89f12cd095e6aa
-          git init -q stryker
-          git -C stryker fetch -q --depth=1 https://github.com/stryker-mutator/stryker-dashboard.git 48c9a2c4b120f6a7ac94bf12a3faa59bff9ced7b
-          git -C stryker checkout -q --detach FETCH_HEAD
-          npm --version
-          node --version
-          for lane in base head; do (cd sut-$lane && npm ci --omit=dev --ignore-scripts --no-audit --no-fund); done
-          npm install --global pnpm@12.20.0 --no-audit --no-fund
-      - name: Compile the actual downstream tests
-        shell: bash
-        working-directory: stryker
-        run: |
-          set -eu
-          pnpm install --frozen-lockfile --ignore-scripts --filter @stryker-mutator/dashboard-common --filter .
-          pnpm exec tsc -b packages/common
-      - name: Measure baseline under the native npm script shell
-        run: python verify.py base sut-base stryker reports-base
-      - name: Measure submitted c8 under the native npm script shell
-        if: success() || failure()
-        run: python verify.py head sut-head stryker reports-head
-  stock:
+  test:
     if: github.repository == 'businessdeveloper69/c8'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -60,13 +15,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 654a366a7c0599c8df2eddbabf89f12cd095e6aa
+          ref: c71d1e862685521cb56cd0e6bc39a61a6a74a0a0
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - run: git rev-parse HEAD && node --version && npm --version
       - run: npm ci --engine-strict
       - run: npm i monocart-coverage-reports@2 --save-dev
       - run: npm test
+  windows:
+    if: github.repository == 'businessdeveloper69/c8'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c71d1e862685521cb56cd0e6bc39a61a6a74a0a0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm config set update-notifier false
+      - run: npm ci
+      - run: npm i monocart-coverage-reports@2 --save-dev
+      - run: npm test
+  coverage:
+    if: github.repository == 'businessdeveloper69/c8'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c71d1e862685521cb56cd0e6bc39a61a6a74a0a0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - run: npm i monocart-coverage-reports@2 --save-dev
+      - run: npm run coverage
