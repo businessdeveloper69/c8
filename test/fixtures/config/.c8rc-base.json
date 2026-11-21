@@ -1,4 +1,0 @@
-{
-  "extends": "./test/fixtures/config/.c8rc.json",
-  "branches": 55
-}
