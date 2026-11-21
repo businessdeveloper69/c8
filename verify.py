@@ -32,7 +32,7 @@ def run(name, cwd, script):
     trace = scratch / (name+'.argv')
     if trace.exists():
         trace.unlink()
-    env = {**os.environ, 'C8_488_BIN': str(cli), 'C8_488_TRACE': str(trace), 'NODE_OPTIONS': '--require="' + str(parent/'observe.cjs') + '"'}
+    env = {**os.environ, 'C8_488_BIN': str(cli), 'C8_488_TRACE': str(trace), 'NODE_OPTIONS': '--require="' + (parent/'observe.cjs').as_posix() + '"'}
     cmd = [os.environ['ComSpec'], '/d', '/s', '/c', 'npm.cmd run '+script] if WINDOWS else ['npm', 'run', script]
     p = subprocess.run(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
     (scratch/(name+'.log')).write_text(p.stdout, encoding='utf-8')

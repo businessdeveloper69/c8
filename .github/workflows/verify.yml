@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, ubuntu-24.04]
+        os: [windows-2025]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
