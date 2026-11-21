@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 
+sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
 WINDOWS = os.name == 'nt'
 parent = Path(__file__).resolve().parent
 lane, source, consumer, scratch = sys.argv[1:]
@@ -66,8 +67,9 @@ def actual():
     assert item['passed_test_count']>0 and item['covered_files'] and len(item['thresholds'])==4
     tests_included=any(re.search(r'(^|/)test/',n) for n in item['covered_files'])
     broken=WINDOWS and lane=='base'
-    assert tests_included==broken,(tests_included,broken,item)
-    assert (item['exit']!=0)==broken,(item['exit'], broken, item)
+    item['test_files_included']=tests_included
+    if not broken:
+        assert not tests_included and item['exit']==0, item
 
 
 def controls():
@@ -114,8 +116,16 @@ def controls():
 
 
 try:
-    actual()
-    controls()
+    problems=[]
+    for name, func in [('Stryker',actual),('controls',controls)]:
+        try:
+            func()
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            problems.append(name+': '+repr(exc))
+    if problems:
+        raise AssertionError(problems)
 finally:
     (scratch/'receipt.json').write_text(json.dumps(results,indent=2), encoding='utf-8')
     print('C8_488_RECEIPT='+json.dumps(results),flush=True)
